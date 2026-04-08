@@ -1,42 +1,27 @@
-# auto-bow-mount-v7
+# 洛克王国：世界 叶天帝 自动鞠躬骑乘脚本
 
-Windows GUI automation tool rewritten from an original 按键精灵 `.Q` script.
+完全免费，`exe` 脚本请在仓库 `Release` 中下载。
 
-## What it does
+## 功能
 
-- Runs the bow/mount loop with configurable delays
-- Supports random jitter
-- Supports repeated small cycles and big-cycle waiting
-- Supports optional daily 4:00 card-skip click
-- Saves configuration as `auto_bow_mount_config.json`
+- 图形界面启动、暂停/继续、终止脚本
+- 按设定流程执行 `Tab -> 动作键 -> ESC -> R -> 左键`
+- 支持随机延迟范围
+- 支持单次小循环次数和大循环等待
+- 支持保存设置和恢复默认设置
+- 支持可选的 `4:00` 月卡跳过点击
 
-## Main file
+## 使用说明
 
-- `auto_bow_mount_gui.py`
+- 启动脚本后，保持游戏窗口为前台
+- 如果游戏使用管理员权限运行，本程序也请使用管理员权限运行
+- 配置会保存在程序目录下的 `auto_bow_mount_config.json`
 
-## Default values
+## 免责声明
 
-- first loop delay: `2`
-- tab delay: `1`
-- action delay: `1`
-- before mount delay: `2`
-- ride duration: `12`
-- between small cycles: `3`
-- between big cycles: `2`
-- jitter range: `1000-2500 ms`
-- salute key: `2`
-- small cycle count: `10`
-- daily skip: `off`
+- 本项目仅用于学习、研究 Windows GUI 自动化与脚本改写流程
+- 使用者应自行承担因使用本程序产生的全部风险和后果
+- 请自行判断是否符合目标软件、游戏或平台的使用规则
 
-## Build
-
-```powershell
-python -m PyInstaller --noconfirm --clean --onefile --windowed --name 自动鞠躬骑乘_v7 auto_bow_mount_gui.py
-```
-
-## Note
-
-Run the program as Administrator if the target game is also running as Administrator.
-
-Author: `@f`  
-GitHub: `https://github.com/futuer-szd`
+作者：`@f`  
+GitHub：`https://github.com/futuer-szd`
