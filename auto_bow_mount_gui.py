@@ -21,8 +21,10 @@ FREE_TEXT = "完全免费开源，exe脚本请在 Release 中下载"
 
 KEYEVENTF_EXTENDEDKEY = 0x0001
 KEYEVENTF_KEYUP = 0x0002
+KEYEVENTF_SCANCODE = 0x0008
 INPUT_MOUSE = 0
 INPUT_KEYBOARD = 1
+MAPVK_VK_TO_VSC = 0
 MOUSEEVENTF_LEFTDOWN = 0x0002
 MOUSEEVENTF_LEFTUP = 0x0004
 
@@ -220,19 +222,36 @@ def save_config(config: ScriptConfig) -> None:
     )
 
 
+def _send_input(input_struct: INPUT) -> None:
+    sent = user32.SendInput(1, ctypes.byref(input_struct), ctypes.sizeof(INPUT))
+    if sent != 1:
+        raise ctypes.WinError(ctypes.get_last_error())
+
+
 def press_virtual_key(vk_code: int) -> None:
-    flags = 0
+    scan_code = user32.MapVirtualKeyW(vk_code, MAPVK_VK_TO_VSC)
+    flags = KEYEVENTF_SCANCODE
     if vk_code in EXTENDED_KEY_VKS:
         flags |= KEYEVENTF_EXTENDEDKEY
-    user32.keybd_event(vk_code, 0, flags, 0)
+    key_down = INPUT(
+        type=INPUT_KEYBOARD,
+        union=INPUTUNION(ki=KEYBDINPUT(wVk=0, wScan=scan_code, dwFlags=flags)),
+    )
+    key_up = INPUT(
+        type=INPUT_KEYBOARD,
+        union=INPUTUNION(ki=KEYBDINPUT(wVk=0, wScan=scan_code, dwFlags=flags | KEYEVENTF_KEYUP)),
+    )
+    _send_input(key_down)
     time.sleep(0.03)
-    user32.keybd_event(vk_code, 0, flags | KEYEVENTF_KEYUP, 0)
+    _send_input(key_up)
 
 
 def left_click() -> None:
-    user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+    mouse_down = INPUT(type=INPUT_MOUSE, union=INPUTUNION(mi=MOUSEINPUT(dwFlags=MOUSEEVENTF_LEFTDOWN)))
+    mouse_up = INPUT(type=INPUT_MOUSE, union=INPUTUNION(mi=MOUSEINPUT(dwFlags=MOUSEEVENTF_LEFTUP)))
+    _send_input(mouse_down)
     time.sleep(0.03)
-    user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+    _send_input(mouse_up)
 
 
 class AutomationRunner:
