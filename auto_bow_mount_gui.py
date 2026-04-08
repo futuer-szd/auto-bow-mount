@@ -1,13 +1,14 @@
 import ctypes
 import json
 import platform
+import queue
 import random
 import sys
 import threading
 import time
 from ctypes import wintypes
 from dataclasses import dataclass
-from datetime import datetime, time as dt_time
+from datetime import datetime, time as dt_time, timedelta, timezone
 from pathlib import Path
 import tkinter as tk
 from tkinter import messagebox, ttk
@@ -66,6 +67,7 @@ ENTRY_BORDER = "#26a269"
 WINDOW_BG = "#f7f5ef"
 PANEL_BG = "#fdfcf8"
 ACCENT = "#8d1f12"
+BEIJING_TZ = timezone(timedelta(hours=8))
 
 user32 = ctypes.WinDLL("user32", use_last_error=True)
 shell32 = ctypes.WinDLL("shell32", use_last_error=True)
@@ -210,9 +212,9 @@ def load_config() -> ScriptConfig:
         return ScriptConfig.from_dict({})
     try:
         data = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        return ScriptConfig.from_dict(data)
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
         return ScriptConfig.from_dict({})
-    return ScriptConfig.from_dict(data)
 
 
 def save_config(config: ScriptConfig) -> None:
@@ -351,19 +353,23 @@ class AutomationRunner:
         if not self.config.enable_daily_skip:
             return True
 
-        now = datetime.now()
+        now = datetime.now(BEIJING_TZ)
         today = now.date().isoformat()
         if self.last_daily_skip_date == today:
             return True
-        if now.time() < dt_time(3, 58, 0):
+
+        window_start = datetime.combine(now.date(), dt_time(3, 58, 0), tzinfo=BEIJING_TZ)
+        window_end = datetime.combine(now.date(), dt_time(4, 0, 0), tzinfo=BEIJING_TZ)
+        trigger_time = datetime.combine(now.date(), dt_time(4, 0, 10), tzinfo=BEIJING_TZ)
+        if now < window_start or now > window_end:
             return True
 
-        self.log("进入月卡跳过时间窗，等待到 04:00:10 后自动点击一次。")
+        self.log("进入北京时间月卡跳过时间窗，等待到 04:00:10 后自动点击一次。")
         while not self.stop_event.is_set():
             if not self._wait_if_paused():
                 return False
-            now = datetime.now()
-            if now.time() >= dt_time(4, 0, 10):
+            now = datetime.now(BEIJING_TZ)
+            if now >= trigger_time:
                 left_click()
                 self.last_daily_skip_date = today
                 self.log("已执行 04:00:10 月卡跳过点击，并额外等待 10 秒。")
@@ -437,6 +443,8 @@ class App:
         self.root.minsize(800, 600)
         self.root.configure(bg=WINDOW_BG)
 
+        self.ui_queue = queue.Queue()
+        self._closing = False
         self.runner = None
         self.status_var = tk.StringVar(value="未运行")
 
@@ -457,6 +465,7 @@ class App:
 
         self._build_styles()
         self._build_ui()
+        self.root.after(50, self._process_ui_queue)
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
     def _build_styles(self) -> None:
@@ -688,7 +697,7 @@ class App:
         self.log_text.configure(state="disabled")
 
     def log(self, message: str) -> None:
-        self.root.after(0, self._append_log, message)
+        self.ui_queue.put(("log", message))
 
     def _set_form_from_config(self, config: ScriptConfig) -> None:
         self.first_loop_delay_var.set(format_number(config.first_loop_delay))
@@ -722,7 +731,7 @@ class App:
         return ScriptConfig.from_dict(data)
 
     def _on_runner_state_change(self, state: str) -> None:
-        self.root.after(0, self._apply_runner_state, state)
+        self.ui_queue.put(("state", state))
 
     def _apply_runner_state(self, state: str) -> None:
         if state == "running":
@@ -799,7 +808,24 @@ class App:
             self.log("已发送中止指令，等待当前步骤结束。")
 
     def _on_runner_finished(self) -> None:
-        self.root.after(0, self._set_idle_state)
+        self.ui_queue.put(("finished", None))
+
+    def _process_ui_queue(self) -> None:
+        while True:
+            try:
+                action, payload = self.ui_queue.get_nowait()
+            except queue.Empty:
+                break
+
+            if action == "log":
+                self._append_log(payload)
+            elif action == "state":
+                self._apply_runner_state(payload)
+            elif action == "finished":
+                self._set_idle_state()
+
+        if not self._closing:
+            self.root.after(50, self._process_ui_queue)
 
     def _set_idle_state(self) -> None:
         self.status_var.set("未运行")
@@ -817,6 +843,7 @@ class App:
             save_config(self._read_config_from_form())
         except (ValueError, OSError):
             pass
+        self._closing = True
         self.root.destroy()
 
 
