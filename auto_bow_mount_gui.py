@@ -17,7 +17,7 @@ APP_TITLE = "自动鞠躬骑乘"
 # Author marker: @f
 AUTHOR_TEXT = "@f"
 GITHUB_TEXT = "github: https://github.com/futuer-szd"
-FREE_TEXT = "完全免费开源，exe脚本请在 Release 中下载"
+DISCLAIMER_TEXT = "免责声明：本脚本仅供研究学习，使用后果自负。"
 
 KEYEVENTF_EXTENDEDKEY = 0x0001
 KEYEVENTF_KEYUP = 0x0002
@@ -582,7 +582,7 @@ class App:
             font=("Microsoft YaHei UI", 14, "bold"),
         ).pack(side="left")
 
-        note_text = "说明：每个“延迟(秒)”字段都会额外叠加上方的随机毫秒范围。完全免费开源。"
+        note_text = "说明：每个“延迟(秒)”字段都会额外叠加上方的随机毫秒范围。"
         tk.Label(
             info_panel,
             text=note_text,
@@ -602,15 +602,7 @@ class App:
         ).pack(anchor="w", pady=(6, 0))
         tk.Label(
             info_panel,
-            text=FREE_TEXT,
-            bg=PANEL_BG,
-            fg="#0f766e",
-            justify="left",
-            font=("Microsoft YaHei UI", 9),
-        ).pack(anchor="w", pady=(4, 0))
-        tk.Label(
-            info_panel,
-            text="免责声明：本脚本仅供研究学习，脚本使用后果自负。",
+            text=DISCLAIMER_TEXT,
             bg=PANEL_BG,
             fg="#7a7a7a",
             justify="left",
@@ -655,7 +647,7 @@ class App:
         credit_bar.pack(fill="x", pady=(6, 0))
         tk.Label(
             credit_bar,
-            text=f"作者 {AUTHOR_TEXT}    {GITHUB_TEXT}    {FREE_TEXT}",
+            text=f"作者 {AUTHOR_TEXT}    {GITHUB_TEXT}    {DISCLAIMER_TEXT}",
             bg=WINDOW_BG,
             fg="#8a8a8a",
             font=("Consolas", 8),
