@@ -14,8 +14,8 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 
-APP_TITLE = "自动鞠躬骑乘"
-VERSION_TEXT = "v1.1"
+APP_TITLE = "自动鞠躬取消"
+VERSION_TEXT = "v1.0"
 # Author marker: @f
 AUTHOR_TEXT = "@f"
 GITHUB_TEXT = "github: https://github.com/futuer-szd"
@@ -34,6 +34,7 @@ VK_CODE_MAP = {
     "TAB": 0x09,
     "ESC": 0x1B,
     "R": 0x52,
+    "SPACE": 0x20,
     "0": 0x30,
     "1": 0x31,
     "2": 0x32,
@@ -50,17 +51,18 @@ EXTENDED_KEY_VKS = set()
 
 DEFAULT_CONFIG = {
     "first_loop_delay": 2.0,
-    "tab_delay": 1.0,
-    "bow_key_delay": 1.0,
-    "before_mount_delay": 2.0,
-    "ride_duration": 12.0,
-    "between_small_cycles_delay": 3.0,
-    "between_big_cycles_wait": 2.0,
-    "jitter_min_ms": 1000,
-    "jitter_max_ms": 2500,
+    "tab_delay": 0.5,
+    "action_to_esc_delay": 0.2,
+    "jump_delay": 0.15,
+    "before_mount_delay": 1.5,
+    "ride_duration": 7.0,
+    "between_small_cycles_delay": 1.0,
+    "between_big_cycles_wait": 5.0,
+    "jitter_min_ms": 100,
+    "jitter_max_ms": 300,
     "salute_key": "2",
     "small_cycle_count": 10,
-    "enable_daily_skip": False,
+    "enable_daily_skip": True,
 }
 
 ENTRY_BG = "#ffffff"
@@ -123,7 +125,8 @@ class INPUT(ctypes.Structure):
 class ScriptConfig:
     first_loop_delay: float
     tab_delay: float
-    bow_key_delay: float
+    action_to_esc_delay: float
+    jump_delay: float
     before_mount_delay: float
     ride_duration: float
     between_small_cycles_delay: float
@@ -137,10 +140,13 @@ class ScriptConfig:
     @classmethod
     def from_dict(cls, data: dict) -> "ScriptConfig":
         merged = DEFAULT_CONFIG | data
+        if "jump_delay" not in data and "bow_key_delay" in data:
+            merged["jump_delay"] = data["bow_key_delay"]
         config = cls(
             first_loop_delay=max(0.0, float(merged["first_loop_delay"])),
             tab_delay=max(0.0, float(merged["tab_delay"])),
-            bow_key_delay=max(0.0, float(merged["bow_key_delay"])),
+            action_to_esc_delay=max(0.0, float(merged["action_to_esc_delay"])),
+            jump_delay=max(0.0, float(merged["jump_delay"])),
             before_mount_delay=max(0.0, float(merged["before_mount_delay"])),
             ride_duration=max(0.0, float(merged["ride_duration"])),
             between_small_cycles_delay=max(0.0, float(merged["between_small_cycles_delay"])),
@@ -161,7 +167,8 @@ class ScriptConfig:
         return {
             "first_loop_delay": self.first_loop_delay,
             "tab_delay": self.tab_delay,
-            "bow_key_delay": self.bow_key_delay,
+            "action_to_esc_delay": self.action_to_esc_delay,
+            "jump_delay": self.jump_delay,
             "before_mount_delay": self.before_mount_delay,
             "ride_duration": self.ride_duration,
             "between_small_cycles_delay": self.between_small_cycles_delay,
@@ -199,7 +206,7 @@ def get_app_dir() -> Path:
     return Path(__file__).resolve().parent
 
 
-CONFIG_PATH = get_app_dir() / "auto_bow_mount_config.json"
+CONFIG_PATH = get_app_dir() / "auto_bow_cancel_config.json"
 
 
 def format_number(value: float | int) -> str:
@@ -332,10 +339,15 @@ class AutomationRunner:
 
         if not self._press(self.config.salute_key):
             return False
-        if not self._delay_with_jitter(self.config.bow_key_delay):
+        if not self._sleep(self.config.action_to_esc_delay):
             return False
 
         if not self._press("ESC"):
+            return False
+        if not self._delay_with_jitter(self.config.jump_delay):
+            return False
+
+        if not self._press("SPACE"):
             return False
         if not self._delay_with_jitter(self.config.before_mount_delay):
             return False
@@ -457,7 +469,8 @@ class App:
         config = load_config()
         self.first_loop_delay_var = tk.StringVar()
         self.tab_delay_var = tk.StringVar()
-        self.bow_key_delay_var = tk.StringVar()
+        self.action_to_esc_delay_var = tk.StringVar()
+        self.jump_delay_var = tk.StringVar()
         self.before_mount_delay_var = tk.StringVar()
         self.ride_duration_var = tk.StringVar()
         self.between_small_cycles_delay_var = tk.StringVar()
@@ -490,7 +503,7 @@ class App:
 
         title = tk.Label(
             flow_panel,
-            text="---> 鞠躬(Tab ---> 鞠躬 ---> ESC) ---> 骑乘R ---> 退出骑乘左键 ---> 下一次鞠躬",
+            text="---> 鞠躬(Tab ---> 鞠躬 ---> ESC ---> 空格跳跃) ---> 骑乘R ---> 退出骑乘左键 ---> 下一次鞠躬取消",
             bg=PANEL_BG,
             fg="#1f1f1f",
             font=("Microsoft YaHei UI", 14, "bold"),
@@ -511,7 +524,8 @@ class App:
         flow_fields = [
             ("启动前", self.first_loop_delay_var),
             ("Tab后", self.tab_delay_var),
-            ("动作后", self.bow_key_delay_var),
+            ("动作后", self.action_to_esc_delay_var),
+            ("跳前", self.jump_delay_var),
             ("骑乘前", self.before_mount_delay_var),
             ("骑乘中", self.ride_duration_var),
             ("下次前", self.between_small_cycles_delay_var),
@@ -708,7 +722,8 @@ class App:
     def _set_form_from_config(self, config: ScriptConfig) -> None:
         self.first_loop_delay_var.set(format_number(config.first_loop_delay))
         self.tab_delay_var.set(format_number(config.tab_delay))
-        self.bow_key_delay_var.set(format_number(config.bow_key_delay))
+        self.action_to_esc_delay_var.set(format_number(config.action_to_esc_delay))
+        self.jump_delay_var.set(format_number(config.jump_delay))
         self.before_mount_delay_var.set(format_number(config.before_mount_delay))
         self.ride_duration_var.set(format_number(config.ride_duration))
         self.between_small_cycles_delay_var.set(format_number(config.between_small_cycles_delay))
@@ -723,7 +738,8 @@ class App:
         data = {
             "first_loop_delay": self.first_loop_delay_var.get().strip(),
             "tab_delay": self.tab_delay_var.get().strip(),
-            "bow_key_delay": self.bow_key_delay_var.get().strip(),
+            "action_to_esc_delay": self.action_to_esc_delay_var.get().strip(),
+            "jump_delay": self.jump_delay_var.get().strip(),
             "before_mount_delay": self.before_mount_delay_var.get().strip(),
             "ride_duration": self.ride_duration_var.get().strip(),
             "between_small_cycles_delay": self.between_small_cycles_delay_var.get().strip(),
@@ -771,7 +787,7 @@ class App:
         except OSError as exc:
             messagebox.showerror(APP_TITLE, f"默认值已恢复，但写入配置失败：{exc}")
             return
-        self.log("已恢复自动鞠躬骑乘.Q 的默认设置，并写入配置文件。")
+        self.log("已恢复自动鞠躬取消的默认设置，并写入配置文件。")
 
     def start_or_resume(self) -> None:
         if self.runner and self.runner.is_alive():
